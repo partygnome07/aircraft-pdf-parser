@@ -21,13 +21,13 @@ if uploaded_file:
 
         raw_text = extract_text_from_pdf(tmp_file_path)
 
-    with st.spinner("🤖 Calling Claude API for parsing..."):
+    with st.spinner("Extracting Data"):
         structured_json = call_extraction(raw_text)
 
     with st.spinner("📊 Formatting extracted data..."):
         meta_df, spares_df = format_output(structured_json)
 
-    st.success("✅ Extraction Complete!")
+    st.success("Extraction Complete")
 
     st.subheader("Metadata")
     st.dataframe(meta_df)
