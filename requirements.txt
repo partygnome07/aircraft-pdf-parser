@@ -1,5 +1,0 @@
-openai
-pdfplumber
-streamlit
-pandas
-xlsxwriter
