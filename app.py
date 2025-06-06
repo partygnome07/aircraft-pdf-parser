@@ -4,7 +4,7 @@ import io
 import streamlit as st
 import pandas as pd
 from pathlib import Path
-from parser import extract_text_from_pdf, call_extraction, detect_engine_type_from_filename, leap_schema, cfm_schema
+from your_parser_module import extract_text_from_pdf, call_extraction, detect_engine_type_from_filename, leap_schema, cfm_schema
 
 st.set_page_config(page_title="PDF→Excel Parser", layout="wide")
 
