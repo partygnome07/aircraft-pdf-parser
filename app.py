@@ -22,7 +22,7 @@ st.markdown(f"**Selected Engine Type:** {engine_type}")
 
 uploaded_files = st.file_uploader("Upload PDF(s)", type="pdf", accept_multiple_files=True)
 
-if uploaded_files:
+if uploaded_files is not None and len(uploaded_files) > 0:
     for uploaded_file in uploaded_files:
         filename = uploaded_file.name
         st.markdown(f"#### 📄 Processing: `{filename}`")
