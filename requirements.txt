@@ -1,14 +1,5 @@
-# Upgrade pip before installing anything else
-pip>=24.0
-
-streamlit==1.30.0
-pdfplumber==0.7.6
-openai==0.43.0
-pandas==2.0.3
-xlsxwriter==3.1.3
-
-streamlit==1.30.0
-pdfplumber==0.7.6
-openai==0.43.0
-pandas==2.0.3
-xlsxwriter==3.1.3
+streamlit
+pdfplumber
+openai
+pandas
+xlsxwriter
