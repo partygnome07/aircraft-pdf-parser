@@ -1,13 +1,20 @@
-
 import os
 import io
+import json
 import streamlit as st
 import pandas as pd
 from pathlib import Path
-from your_parser_module import extract_text_from_pdf, call_extraction, detect_engine_type_from_filename, leap_schema, cfm_schema
+
+# ← Make sure this matches your filename exactly:
+from pdf_parser import (
+    extract_text_from_pdf,
+    call_extraction,
+    detect_engine_type_from_filename,
+    leap_schema,
+    cfm_schema
+)
 
 st.set_page_config(page_title="PDF→Excel Parser", layout="wide")
-
 st.title("📄 PDF → Excel Parser")
 st.markdown(
     """
@@ -15,9 +22,7 @@ Upload a single PDF, choose which schema to run (CFM or LEAP), and get back a do
 """
 )
 
-# Toggle for schema choice
 schema_choice = st.radio("Choose engine schema:", ("CFM", "LEAP"))
-
 uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
 if not uploaded_file:
     st.info("Please upload a PDF to get started.")
@@ -51,12 +56,12 @@ if st.button("Process PDF"):
     if st.checkbox("Show raw JSON output"):
         st.json(parsed)
 
-    # Build Excel
+    # Build Excel in memory
     meta = parsed.get("documentInfo", {})
     flat_meta = {}
     for key, val in meta.items():
         if isinstance(val, (dict, list)):
-            flat_meta[key] = pd.io.json.dumps(val)
+            flat_meta[key] = json.dumps(val)
         else:
             flat_meta[key] = val
     flat_meta["engine_type"] = engine_type
