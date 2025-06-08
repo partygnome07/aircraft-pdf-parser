@@ -1,108 +1,59 @@
-import os
-import io
-import json
+
 import streamlit as st
-import pandas as pd
-from pathlib import Path
+import tempfile
+import os
+from your_parser_module import extract_text_from_pdf, call_extraction
+from json_to_excel_formatters import json_to_excel_leap, json_to_excel_cfm
+from schemas import leap_schema, cfm_schema
 
-# ← Make sure this matches your filename exactly:
-from pdf_parser import (
-    extract_text_from_pdf,
-    call_extraction,
-    detect_engine_type_from_filename,
-    leap_schema,
-    cfm_schema
+st.set_page_config(page_title="Aircraft PDF Parser", layout="wide")
+
+st.title("✈️ Aircraft Service Bulletin Parser")
+
+# Engine type toggle
+engine_type = st.radio(
+    "Select Engine Type:",
+    options=["CFM", "LEAP"],
+    index=0,
+    horizontal=True,
+    help="Choose the engine type for parsing configuration"
 )
+st.markdown(f"**Selected Engine Type:** {engine_type}")
 
-st.set_page_config(page_title="PDF→Excel Parser", layout="wide")
-st.title("📄 PDF → Excel Parser")
-st.markdown(
-    """
-Upload a single PDF, choose which schema to run (CFM or LEAP), and get back a downloadable Excel.
-"""
-)
+uploaded_files = st.file_uploader("Upload PDF(s)", type="pdf", accept_multiple_files=True)
 
-schema_choice = st.radio("Choose engine schema:", ("CFM", "LEAP"))
-uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
-if not uploaded_file:
-    st.info("Please upload a PDF to get started.")
-    st.stop()
+if uploaded_files:
+    for uploaded_file in uploaded_files:
+        filename = uploaded_file.name
+        st.markdown(f"#### 📄 Processing: `{filename}`")
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+            tmp_file.write(uploaded_file.read())
+            tmp_path = tmp_file.name
 
-if st.button("Process PDF"):
-    temp_path = Path("/tmp") / uploaded_file.name
-    with open(temp_path, "wb") as f:
-        f.write(uploaded_file.getvalue())
+        try:
+            raw_text = extract_text_from_pdf(tmp_path)
+            structured_json, is_cfm = call_extraction(raw_text, engine_type, leap_schema, cfm_schema)
 
-    try:
-        pdf_text = extract_text_from_pdf(str(temp_path))
-    except Exception as e:
-        st.error(f"Failed to extract text: {e}")
-        st.stop()
+            # Save results
+            out_dir = "/mnt/data/json_outputs"
+            os.makedirs(out_dir, exist_ok=True)
 
-    if schema_choice == "CFM":
-        schema = cfm_schema
-        engine_type = "CFM"
-    else:
-        schema = leap_schema
-        engine_type = "LEAP"
+            json_path = os.path.join(out_dir, filename.replace(".pdf", ".json"))
+            with open(json_path, "w") as f:
+                f.write(json.dumps(structured_json, indent=2))
 
-    try:
-        with st.spinner("Calling LLM to parse PDF..."):
-            parsed = call_extraction(pdf_text, schema)
-    except Exception as e:
-        st.error(f"LLM parse error: {e}")
-        st.stop()
+            st.success("✅ Extraction complete")
+            st.download_button("📄 Download JSON", data=json.dumps(structured_json, indent=2), file_name=filename.replace(".pdf", ".json"))
 
-    if st.checkbox("Show raw JSON output"):
-        st.json(parsed)
+            if is_cfm:
+                excel_path = json_to_excel_cfm(structured_json, filename)
+            else:
+                excel_path = json_to_excel_leap(structured_json, filename)
 
-    # Build Excel in memory
-    meta = parsed.get("documentInfo", {})
-    flat_meta = {}
-    for key, val in meta.items():
-        if isinstance(val, (dict, list)):
-            flat_meta[key] = json.dumps(val)
-        else:
-            flat_meta[key] = val
-    flat_meta["engine_type"] = engine_type
-    flat_meta["filename"] = uploaded_file.name
+            with open(excel_path, "rb") as f:
+                st.download_button("📊 Download Excel", data=f, file_name=os.path.basename(excel_path))
 
-    meta_df = pd.DataFrame([flat_meta])
-
-    tables = {}
-    if engine_type == "LEAP":
-        mat = parsed.get("materialInformation", {})
-        spares = mat.get("listOfSpares", [])
-        removed = mat.get("listOfRemovedSpares", [])
-        if isinstance(spares, list) and spares:
-            tables["ListOfSpares"] = spares
-        if isinstance(removed, list) and removed:
-            tables["RemovedSpares"] = removed
-    else:
-        mat = parsed.get("materialInformation", {})
-        parts = mat.get("parts", [])
-        config_changes = parsed.get("configurationChanges", [])
-        if isinstance(parts, list) and parts:
-            tables["Parts"] = parts
-        if isinstance(config_changes, list) and config_changes:
-            tables["ConfigurationChanges"] = config_changes
-
-    output_buffer = io.BytesIO()
-    with pd.ExcelWriter(output_buffer, engine="xlsxwriter") as writer:
-        meta_df.to_excel(writer, sheet_name="Metadata", index=False)
-        for sheet_name, rows in tables.items():
-            df = pd.DataFrame(rows)
-            if "documentTitle" in meta:
-                df.insert(0, "DocumentTitle", meta.get("documentTitle", ""))
-            elif "documentName" in meta:
-                df.insert(0, "DocumentName", meta.get("documentName", ""))
-            df.to_excel(writer, sheet_name=sheet_name, index=False)
-    output_buffer.seek(0)
-
-    download_name = f"{Path(uploaded_file.name).stem}_{engine_type}.xlsx"
-    st.download_button(
-        label="⬇️ Download Excel",
-        data=output_buffer,
-        file_name=download_name,
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+        except Exception as e:
+            st.error(f"❌ Error processing {filename}: {e}")
+        finally:
+            os.unlink(tmp_path)
